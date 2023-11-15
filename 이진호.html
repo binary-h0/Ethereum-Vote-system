@@ -1,0 +1,790 @@
+<html>
+<head>
+<meta charset="utf-8">
+<script src='web3.min.js'></script>
+<script type="text/javascript" src="poll_system_abi.js"></script>
+<script type="text/javascript" src="poll_abi.js"></script>
+<script type="text/javascript" src="poll_bytecode.js"></script>
+<script type="text/javascript">
+var accounts;
+var pollContractInstance = null;
+var pollSystemInstance = null;
+var walletConnected;
+var pollAddress;
+var pollSystemAddress;
+var div_home;
+var div_register;
+var div_not_connected;
+var div_deploy;
+var div_set_option;
+var div_invite_voter;
+var div_vote_poll;
+var div_poll_result;
+var div_my_poll;
+var optionCounter = 0;
+var optionList = [];
+var poll_options = [];
+var ban_lis = [];
+var tmp_address;
+var appendVoterNum;
+var ban_user_lis = [];
+
+window.addEventListener('load', poll);
+
+async function poll() {
+  initTag();
+  walletConnected = document.getElementById("walletconnected");
+  if (window.ethereum) {
+    window.web3 = new Web3(window.ethereum);
+    window.accounts = await ethereum.request({ method: 'eth_requestAccounts' });
+    console.log("true");
+    walletConnected.innerHTML = "연결됨";
+    pollSystemAddress = "0x24D72a315a31CCe387804F60055C80244DB245c4"
+    pollSystemInstance = await new window.web3.eth.Contract(pollsysabi, pollSystemAddress);
+  // Legacy dapp browsers...
+  } else if (window.web3) {
+    window.web3 = new Web3(web3.currentProvider);
+    walletConnected.innerHTML = "연결됨";
+    // Acccounts always exposed
+    //    web3.eth.sendTransaction({/* ... */});
+  }
+  // Non-dapp browsers...
+  else {
+    viewNotConnected();
+    console.log('Non-Ethereum browser detected. You should consider trying MetaMask!');
+    walletConnected.innerHTML = "연결되지 않음";
+    window.web3 = null
+  }
+  addEvtHandlers();
+  await checkUser();
+  console.log(accounts)
+}
+
+function addEvtHandlers() {
+  let btn = document.getElementById("deploy_button");
+  btn.addEventListener('click', deployPoll);
+  btn = document.getElementById("my_poll_button");
+  btn.addEventListener('click', getUserCreatedPollList);
+  btn = document.getElementById("invited_poll_button");
+  btn.addEventListener('click', getUserInvitedPollList);
+  btn = document.getElementById("make_poll_button");
+  // btn.addEventListener('click', ); // 투표 만들기 페이지로 이동
+  btn = document.getElementById("register_button");
+  btn.addEventListener('click', register);
+  btn = document.getElementById("home_button");
+  btn.addEventListener('click', viewHome);
+  btn = document.getElementById("home_button1");
+  btn.addEventListener('click', viewHome);
+  btn = document.getElementById("home_button2");
+  btn.addEventListener('click', viewHome);
+  btn = document.getElementById("home_button3");
+  btn.addEventListener('click', viewHome);
+  btn = document.getElementById("make_poll_button");
+  btn.addEventListener('click', createPoll);
+  btn = document.getElementById("append_option_button");
+  btn.addEventListener('click', appendOption);
+  btn = document.getElementById("set_option_button");
+  btn.addEventListener('click', setOption);
+  btn = document.getElementById("button_title1");
+  btn.addEventListener('click', setTitle);
+  btn = document.getElementById("button_desc1");
+  btn.addEventListener('click', setDescription);
+  btn = document.getElementById("button_wpv1");
+  btn.addEventListener('click', setWeiPerVoter);
+  btn = document.getElementById("append_voter_button");
+  btn.addEventListener('click', appendVoter);
+  btn = document.getElementById("set_voter_button");
+  btn.addEventListener('click', setVoter);
+}
+
+function initTag() {
+  div_home = document.getElementById("div_home");
+  div_home.style.display = "none";
+  div_register = document.getElementById("div_register");
+  div_register.style.display = "none";
+  div_not_connected = document.getElementById("div_not_connected");
+  div_not_connected.style.display = "none";
+  div_deploy = document.getElementById("div_deploy");
+  div_deploy.style.display = "none";
+  div_set_option = document.getElementById("div_set_option");
+  div_set_option.style.display = "none";
+  div_invite_voter = document.getElementById("div_invite_voter");
+  div_invite_voter.style.display = "none";
+  div_vote_poll = document.getElementById("div_vote_poll");
+  div_vote_poll.style.display = "none";
+  div_poll_result = document.getElementById("div_poll_result");
+  div_poll_result.style.display = "none";
+  div_my_poll = document.getElementById("div_my_poll");
+  div_my_poll.style.display = "none";
+  div_invited_poll = document.getElementById("div_invited_poll");
+  div_invited_poll.style.display = "none";
+}
+
+async function checkUser() {
+  const info = getUserInfo();
+  info.then(
+    (res) => {
+      if (res[0] == '') {
+        viewRegister();
+      } else {
+        viewHome();
+      }
+    }
+  ).catch(
+    (err) => {
+      console.log(err);
+    }
+  );
+}
+
+function hiddenAll() {
+  div_home.style.display = "none";
+  div_register.style.display = "none";
+  div_not_connected.style.display = "none";
+  div_deploy.style.display = "none";
+  div_set_option.style.display = "none";
+  div_invite_voter.style.display = "none";
+  div_vote_poll.style.display = "none";
+  div_poll_result.style.display = "none";
+  div_my_poll.style.display = "none";
+  div_invited_poll.style.display = "none";
+}
+
+function viewHome() {
+  hiddenAll();
+  div_home.style.display = "";
+}
+
+function viewRegister() {
+  hiddenAll();
+  div_register.style.display = "";
+}
+
+function viewMyPoll() {
+  hiddenAll();
+  div_my_poll.style.display = "";
+}
+
+function viewNotConnected() {
+  hiddenAll();
+  div_not_connected.style.display = "";
+}
+
+function viewCreatePoll() {
+  hiddenAll();
+  div_deploy.style.display = "";
+}
+
+function viewInvitedPoll() {
+  hiddenAll();
+  div_invited_poll.style.display = "";
+}
+
+function viewManagePoll() {
+  hiddenAll();
+  div_set_option.style.display = "";
+}
+
+function viewInvitePoll() {
+  hiddenAll();
+  div_invite_voter.style.display = "";
+}
+
+function viewVotePoll() {
+  hiddenAll();
+  div_vote_poll.style.display = "";
+}
+
+async function setTitle() {
+  var val = document.getElementById("input_title1").value;
+  pollContractInstance = await new window.web3.eth.Contract(pollabi, tmp_address);
+  const res = await pollContractInstance.methods.setTitle(String(val)).send({from:accounts[0]});
+}
+
+async function setDescription() {
+  var val = document.getElementById("input_desc1").value;
+  pollContractInstance = await new window.web3.eth.Contract(pollabi, tmp_address);
+  const res = await pollContractInstance.methods.setDescription(String(val)).send({from:accounts[0]});
+}
+
+async function setWeiPerVoter() {
+  var val = document.getElementById("input_wpv1").value;
+  pollContractInstance = await new window.web3.eth.Contract(pollabi, tmp_address);
+  const res = await pollContractInstance.methods.setWeiPerVoter(Number(val)).send({from:accounts[0]});
+}
+
+async function register() {
+  const name = document.getElementById("input_register_name").value;
+  const sid = document.getElementById("input_register_sid").value;
+  const univ = document.getElementById("input_register_univ").value;
+  const dept = document.getElementById("input_register_dept").value;
+  if ((name === "") || (sid === "") || (univ === "") || (dept === "")) {
+    alert("모든 정보를 입력해주세요.");
+  } else {
+    try {
+      const value = await pollSystemInstance.methods.register([name, univ, dept, sid]).send({from:accounts[0]});
+      console.log(value);
+      hiddenAll();
+      viewHome();
+    } catch (error) {
+      console.log(error);
+    }
+  }
+}
+
+async function deployPoll() {
+  title = document.getElementById('input_title').value;
+  description = document.getElementById('input_description').value;
+  weiPerVoter = document.getElementById('input_weiPerVoter').value;
+  if (title == "" || description == "") {
+    alert("제목과 설명 모두 입력해주세요.");
+  } else {
+    if (weiPerVoter > 0) {
+      pollContractInstance = await new window.web3.eth.Contract(pollabi);
+      const deploy = pollContractInstance.deploy({
+        data: bytecode,
+        arguments: [title, description, weiPerVoter]
+      });
+      const gasEstimate = await deploy.estimateGas();
+      const transaction = await deploy.send({
+        from: window.accounts[0],
+        gas: gasEstimate
+      });
+      pollAddress = transaction.options.address;
+      console.log('Contract address:', transaction.options.address);
+      await registerPoll(pollAddress);
+      // pollContractInstance = await new window.web3.eth.Contract(pollabi, pollAddress);
+      div_deploy.style.display = "none";
+      div_set_option.style.display = "";
+      optionCounter = 0;
+      appendOption();
+
+      alert("배포 성공\n" + pollAddress);
+      window.location.reload();
+    } else {
+      alert("Wei 값을 적절히 입력해주세요.")
+    }
+  }
+}
+
+async function registerPoll(address) {
+  if (pollSystemInstance != null) {
+    try {
+      const value = await pollSystemInstance.methods["createPoll"](address).send({from:accounts[0]});
+      console.log(value);
+    } catch (error) {
+      alert("error occured\n" + error);
+      console.log(error);
+    }
+  }
+}
+
+async function getUserCreatedPollList() {
+  if (pollSystemInstance != null) {
+    viewMyPoll()
+    try {
+      const addresses = await pollSystemInstance.methods["getUserCreatedPollList"]().call({from:accounts[0]});
+      var label_my_poll = document.getElementById("label_my_poll");
+      label_my_poll.innerHTML = "나의 투표 리스트 : " + addresses.length + "개";
+      var div_poll_list = document.getElementById("div_my_poll_list");
+      div_poll_list.innerHTML = ''
+      console.log(addresses);
+      for (let i = 0; i < addresses.length; i++) {
+        const address = addresses[i];
+        var pollInstance = await new window.web3.eth.Contract(pollabi, address);
+        const value = await pollInstance.methods["getInfo"]().call({from:accounts[0]});
+        const voter_num = await pollInstance.methods["getVoterNum"]().call({from:accounts[0]});
+        const amount = await pollInstance.methods["getAmount"]().call({from:accounts[0]});
+        var need_amount = value['weiPerVoter'] * voter_num - amount;
+        if (need_amount < 0) {
+          need_amount = 0;
+        }
+        var html = '<br/>\
+        <div id="my_poll_contents'+i+'" class="div_my_poll_contents">\
+          주소: <label id="my_poll_address'+i+'">'+address+'</label>\
+          <br>\
+          <label for="my_poll_title">제목: '+value['title']+'</label>\
+          <br>\
+          <label for="my_poll_desc">설명: '+value['description']+'</label>\
+          <br>\
+          <label for="my_poll_wpv">투표자 당 wei양: '+value['weiPerVoter']+'</label>\
+          <br>\
+          <label for="my_poll_voter_num">초대된 투표자 수: '+voter_num+'</label>\
+          <br>\
+          <label for="my_poll_amount">투표에 예치된 wei양: '+amount+'  '+'</label><input type="number" placeholder="1000000" id="'+ address +'_send_input"> \
+          <br>\
+          <label for="my_poll_need_amount">투표에 예치해야 할 wei양: '+need_amount+'</label>\
+          <br>\
+          <label for="my_poll_start">투표 시작상태: '+value['start']+'</label>\
+          <br>\
+          <label for="my_poll_close">투표 종료상태: '+value['close']+'</label>\
+          <br>\
+          <input type="button" id="'+ address +'" value="관리하기">\
+          <input type="button" id="'+ address +'_manage_voter" value="초대하기">\
+          <input type="button" id="'+ address +'_send_wei" value="예치하기">\
+          <input type="button" id="'+ address +'_start_button" value="시작하기">\
+          <input type="button" id="'+ address +'_close_button" value="종료하기">\
+          <hr>\
+          <br>\
+        </div>'
+        div_poll_list.innerHTML += html;
+      }
+      for (let i = 0; i < addresses.length; i++) {
+        const address = addresses[i];
+        var btn = document.getElementById(address);
+        btn.addEventListener('click', managePoll);
+        btn = document.getElementById(address + '_manage_voter');
+        btn.addEventListener('click', manageVoter);
+        btn = document.getElementById(address + '_send_wei');
+        btn.addEventListener('click', sendWei);
+        btn = document.getElementById(address + '_start_button');
+        btn.addEventListener('click', startPoll);
+        btn = document.getElementById(address + '_close_button');
+        btn.addEventListener('click', closePoll);
+      }
+      // 나의 투표리스트 추가
+    } catch (error) {
+      alert("error occured\n" + error);
+      console.log(error);
+    }
+  }
+}
+
+async function sendWei(evt) {
+  tmp_address = evt.target.id.split('_')[0];
+  var val = document.getElementById(tmp_address + '_send_input').value;
+  pollContractInstance = await new window.web3.eth.Contract(pollabi, tmp_address);
+  votersAddressList = await pollContractInstance.methods.addAmount().send({
+    from:accounts[0],
+    value: val});
+}
+
+async function manageVoter(evt) {
+  viewInvitePoll();
+  tmp_address = evt.target.id.split('_')[0];
+  pollContractInstance = await new window.web3.eth.Contract(pollabi, tmp_address);
+  votersAddressList = await pollContractInstance.methods.getVotersAddress().call({from:accounts[0]});
+  console.log(votersAddressList);
+  appendVoterNum = 0
+  var div_invited_contents = document.getElementById('div_invited_contents');
+  div_invited_contents.innerHTML = '';
+  html = '';
+  var tmp_lis = []
+  ban_user_lis = [];
+  for (let i = 0; i < votersAddressList.length; i++) {
+    const address = votersAddressList[i];
+    ban_user_lis.push(false);
+    var ban_state = await pollContractInstance.methods.getBanState(address).call({from:accounts[0]});
+    if (ban_state) {
+      continue;
+    }
+    tmp_lis.push(i);
+    html += '<label id="label_address'+ i +'">'+ address +'</label>\
+    <input type="button" value="초대됨" id="ban_button'+ i +'">\
+    <br>';
+  }
+  div_invited_contents.innerHTML = html;
+  
+  for (let i = 0; i < tmp_lis.length; i++) {
+    const element = tmp_lis[i];
+    var btn = document.getElementById('ban_button' + element);
+    
+    btn.addEventListener('click', (evt) => {
+      ban_button = document.getElementById('ban_button' + element);
+      if (ban_user_lis[element] === false) {
+        ban_button.setAttribute('value', '제거됨');
+        ban_user_lis[element] = true;
+      } else {
+        ban_button.setAttribute('value', '초대됨');
+        ban_user_lis[element] = false;
+      }
+    });
+  }
+}
+
+function appendVoter() {
+  div_invite_contents = document.getElementById('div_invite_contents');
+  input_tag = document.createElement('input');
+  input_tag.setAttribute('type', 'text');
+  input_tag.setAttribute('placeholder', '0xabcdefghijklmnop..');
+  input_tag.setAttribute('id', 'voter' + appendVoterNum + '_address');
+  div_invite_contents.appendChild(input_tag);
+  br_tag = document.createElement('br');
+  div_invite_contents.appendChild(br_tag);
+  appendVoterNum++;
+}
+
+async function setVoter() {
+  var voterList = []
+  for (let i = 0; i < appendVoterNum; i++) {
+    address = document.getElementById('voter' + i + '_address').value;
+    if (address === '') {
+      continue;
+    }
+    voterList.push(address);
+  }
+  if (voterList.length != 0) {
+    pollContractInstance = await new window.web3.eth.Contract(pollabi, tmp_address);
+    var res = await pollContractInstance.methods.addVoter(voterList).send({from:accounts[0]});
+    var res = await pollSystemInstance.methods.invitePoll(tmp_address, voterList).send({from:accounts[0]});
+  }
+  var banList = [];
+  for (let i = 0; i < ban_user_lis.length; i++) {
+    const ban_state = ban_user_lis[i];
+    if (ban_state) {
+      var address = document.getElementById('label_address' + i).innerHTML;
+      banList.push(address);
+    }
+  }
+  if (banList.length != 0) {
+    pollContractInstance = await new window.web3.eth.Contract(pollabi, tmp_address);
+    var res = await pollContractInstance.methods.deleteVoter(banList).send({from:accounts[0]});
+  }
+  window.location.reload();
+}
+
+async function startPoll(evt) {
+  const address = evt.target.id.split('_')[0];
+  console.log(address);
+  pollContractInstance = await new window.web3.eth.Contract(pollabi, address);
+  var res = await pollContractInstance.methods.startPoll().send({from:accounts[0]});
+}
+async function closePoll(evt) {
+  const address = evt.target.id.split('_')[0];
+  console.log(address);
+  pollContractInstance = await new window.web3.eth.Contract(pollabi, address);
+  var res = await pollContractInstance.methods.closePoll().send({from:accounts[0]});
+}
+
+async function managePoll(evt) {
+  viewManagePoll();
+  const address = evt.target.id;
+  tmp_address = evt.target.id;
+  pollContractInstance = await new window.web3.eth.Contract(pollabi, address);
+  var pollInstance = pollContractInstance;
+  
+  var info = await pollInstance.methods["getInfo"]().call({from:accounts[0]});
+  var t = document.getElementById("input_title1");
+  t.placeholder = info.title;
+  var d = document.getElementById("input_desc1");
+  d.placeholder = info.description;
+  var n = document.getElementById("input_wpv1");
+  n.placeholder = info.weiPerVoter;
+  ban_lis = [];
+
+  var options = await pollInstance.methods["getOptions"]().call({from:accounts[0]});
+  var div_options_box = document.getElementById('div_options_box');
+  optionCounter = 0;
+  div_options_box.innerHTML = '';
+  for (let i = 0; i < options.length; i++) {
+    const option = options[i];
+    var state = "추가됨";
+    if (option.flag) {
+      ban_lis.push(0);
+      state = "추가됨";
+    } else {
+      ban_lis.push(2);
+      continue;
+    }
+    html = "<div id='label_option"+i+"'>\
+      <br>\
+      이름:<label id='label_option"+i+"_name'>"+option.name+"</label>\
+      <br>\
+      설명:<label id='label_option"+i+"_desc'>"+option.description+"</label>\
+      <br>\
+      투표수:<label id='label_option"+i+"_total'>"+option.count+"</label>\
+      <br>\
+      <input type='button' value='"+ state +"' id='state_button_"+ i +"'>\
+      <br>\
+      <hr>\
+    </div>"
+    div_options_box.innerHTML += html
+  }
+  for (let i = 0; i < options.length; i++) {
+    const option = options[i];
+    if (!option.flag) {
+      continue
+    }
+    var btn = document.getElementById('state_button_' + i);
+    btn.addEventListener('click', (evt) => {
+      s = String(evt.target.id);
+      num = Number(s.split('_')[2]);
+      var button = document.getElementById(s);
+      if (button.value === "추가됨") {
+        button.value = "제거됨";
+        ban_lis[num] = 1;
+        console.log(ban_lis[num]);
+      } else {
+        button.value = "추가됨";
+        ban_lis[num] = 0;
+        console.log(ban_lis[num]);
+      }
+    });
+  }
+}
+
+function getUserInfo() {
+  if (pollSystemInstance != null) {
+    try {
+      const value = pollSystemInstance.methods["getUserInfo"]().call({from:accounts[0]});
+      value.then((res) => {
+        walletConnected.innerHTML = "연결됨: " + res[0] + 
+        " / " + res[1] + 
+        " / " + res[2] +
+        " / " + res[3];
+      }).catch((err) => {
+        console.log(err);
+      });
+      return value;
+    } catch (error) {
+      alert("error occured\n" + error);
+      console.log(error);
+    }
+  }
+}
+
+async function getUserInvitedPollList() {
+  if (pollSystemInstance != null) {
+    viewInvitedPoll();
+    try {
+      const value = await pollSystemInstance.methods["getUserInvitedPollList"]().call({from:accounts[0]});
+      var label_invited_poll = document.getElementById("label_invited_poll");
+      var set_lis = new Set(value);
+      var lis = [];
+      set_lis.forEach(address => {
+        lis.push(address);
+      })
+      console.log(lis);
+      label_invited_poll.innerHTML = "초대된 투표 리스트 : " + set_lis.size + "개";
+      var div_poll_list = document.getElementById("div_invited_poll_list");
+      var n = 0;
+
+      for (let i = 0; i < lis.length; i++) {
+        const address = lis[i];
+        pollContractInstance = await new window.web3.eth.Contract(pollabi, address);
+        const value = await pollContractInstance.methods.getInfo().call({from:accounts[0]});
+        var div_invited_poll_contents = document.createElement('div');
+        div_invited_poll_contents.setAttribute('id', 'invited_poll_contents' + n++);
+        var state = "투표하기";
+        if (value['start'] === false) {
+          state = "준비 중";
+        } else if (value['close'] === true) {
+          state = "종료됨";
+        }
+
+        html = '제목 : '+ value['title'] +'\
+        <br>\
+        설명 : '+ value['description'] +'\
+        <br>\
+        <input type="button", value="'+ state +'" id="go_poll_button'+i+'">\
+        <br><hr>';
+        div_invited_poll_contents.innerHTML += html;
+        div_poll_list.appendChild(div_invited_poll_contents);
+        document.getElementById('go_poll_button' + i).addEventListener('click', async (evt) => {
+          var val = evt.target.value;
+          if (val === "투표하기") {
+            viewVotePoll();
+            pollContractInstance = await new window.web3.eth.Contract(pollabi, address);
+            const options = await pollContractInstance.methods.getOptions().call({from:accounts[0]});
+            
+            for (let i = 0; i < options.length; i++) {
+              var div = document.createElement('div');
+              const option = options[i];
+              if (option['flag']){
+                var html = '이름 : '+ option['name'] +'\
+                <br>\
+                설명 : '+ option['description'] +'\
+                <br>\
+                <input type="button" value="투표하기" id="vote_'+ i +'">'
+                div.innerHTML = html;
+                div_vote_poll.appendChild(div);
+                document.getElementById('vote_' + i).addEventListener('click', async () => {
+                  await pollContractInstance.methods.vote(i).send({from:accounts[0]});
+                });
+              }
+            }
+          }
+        });
+      }
+      
+    } catch (error) {
+      alert("error occured\n" + error);
+      console.log(error);
+    }
+  }
+}
+
+async function createPoll() {
+  if (pollSystemAddress != null) {
+    try {
+      viewCreatePoll();
+    } catch (error) {
+      console.log(error);
+    }
+  }
+}
+
+function appendOption() {
+  var options_box = document.getElementById('div_options_box');
+
+  const div_option_box = document.createElement('div');
+  div_option_box.setAttribute('id', 'div_option_box'+optionCounter);
+  div_option_box.innerHTML += '\
+    <br/>\
+    <div id="div_option'+optionCounter+'_contents" class="div_option_contents">\
+      <input type="text" id="input_option'+optionCounter+'_name" class="input_option_name" placeholder="이름">\
+      <input type="text" id="input_option'+optionCounter+'_describe" class="input_option_description" placeholder="설명">\
+    </div>\
+  ';
+  options_box.appendChild(div_option_box);
+  optionCounter++;
+}
+
+async function setOption() {
+  pollContractInstance = await new window.web3.eth.Contract(pollabi, tmp_address);
+  appendList = [];
+  for (let i = 0; i < optionCounter; i++) {
+    option_title = document.getElementById('input_option'+ i + '_name').value;
+    option_desc = document.getElementById('input_option'+ i + '_describe').value;
+    if (option_title === '') {
+      continue;
+    }
+    appendList.push([true, option_title, option_desc, 0]);
+  }
+  deleteList = [];
+  for (let i = 0; i < ban_lis.length; i++) {
+    const ban = ban_lis[i];
+    if (ban == 1) {
+      deleteList.push(i);
+    }
+  }
+  console.log(deleteList);
+  if (appendList.length != 0) {
+    const res1 = await pollContractInstance.methods.addOption(appendList).send({from:accounts[0]});
+  }
+  if (deleteList.length != 0) {
+    const res2 = await pollContractInstance.methods.deleteOption(deleteList).send({from:accounts[0]});
+  }
+  window.location.reload();
+}
+
+</script>
+</head>
+<body>
+<h1> Let's Vote!!! </h1>
+<a href="https://youtu.be/VFNVKDADwVQ">https://youtu.be/VFNVKDADwVQ</a>
+
+<br/>
+지갑 : <span id="walletconnected"> </span>
+<br/>
+<br/>
+<div id="div_home">
+  <input type="button" id="my_poll_button" value="나의 투표">
+  <br/><br/>
+  <input type="button" id="invited_poll_button" value="초대된 투표">
+  <br/><br/>
+  <input type="button" id="make_poll_button" value="투표 만들기">
+</div>
+<div id="div_register">
+  <label for="label_register">등록 페이지</label>
+  <br/><br/>
+  <input type="text" id="input_register_name" placeholder="이름">
+  <br/><br/>
+  <input type="text" id="input_register_sid" placeholder="학번">
+  <br/><br/>
+  <input type="text" id="input_register_univ" placeholder="소속대학">
+  <br/><br/>
+  <input type="text" id="input_register_dept" placeholder="소속학과(학부)">
+  <br/><br/>
+  <input type="button" id="register_button" value="등록하기">
+</div>
+<div id="div_not_connected">
+  <label for="label_not_connected">지갑을 연결해주세요.</label>
+</div>
+<div id="div_my_poll">
+  <input type="button" id="home_button1" value="홈">
+  <br/><br/>
+  <label id="label_my_poll">나의 투표 리스트 : </label>
+  <hr>
+  <div id="div_my_poll_list">
+    <br/>
+  </div>
+</div>
+
+<div id="div_invited_poll">
+  <input type="button" id="home_button2" value="홈">
+  <br/><br/>
+  <div id="div_invited_poll_list">
+    <label id="label_invited_poll">초대된 투표 리스트 : </label>
+    <br/><br/>
+    <div id="invited_poll_contents">
+      
+    </div>
+  </div>
+</div>
+
+<div id="div_deploy">
+  <input type="button" id="home_button" value="홈">
+  <br/><br/>
+  <label for="label_title">제목 입력</label>
+  <br/>
+  <input type="text" id="input_title" placeholder="Title" style="width:200px">
+  <br/> <br/>
+  <label for="label_description">설명 입력</label>
+  <br/>
+  <input type="text" id="input_description" placeholder="Description" style="width:200px">
+  <br/> <br/>
+  <label for="label_weiPerVoter">투표자가 받을 Wei값</label>
+  <br/>
+  <input type="number" id="input_weiPerVoter" placeholder="100000000" style="width:200px">
+  <br/> <br/>
+  <input type="button" id="deploy_button" value="Deploy Poll" style="width:200px">
+</div>
+<div id="div_set_option">
+  <input type="button" id="home_button3" value="홈">
+  <br/><br/>
+  <div>
+    제목: <input type="text" placeholder="" id="input_title1">
+    <input type="button" value="제목 수정하기" id="button_title1">
+    <br>
+    설명: <input type="text" palceholder="" id="input_desc1">
+    <input type="button" value="설명 수정하기" id="button_desc1">
+    <br>
+    투표자가 받을 Wei양: <input type="number" placeholder="" id="input_wpv1">
+    <input type="button" value="Wei양 수정하기" id="button_wpv1">
+    <br>
+  </div>
+  <br><br>
+  
+  <label for="label_set_option">선택 옵션 설정</label>
+  <br>
+  <div id="div_options_box">
+
+  </div>
+  <br>
+  <input type="button" value="추가하기" id="append_option_button">
+  <br><br>
+  <input type="button" value="설정하기" id="set_option_button">
+</div>
+<div id="div_invite_voter">
+  투표자 초대하기
+  <br><hr>
+  <div id="div_invited_contents">
+    
+  </div>
+  <br><hr>
+  <input type="button" value="추가하기" id="append_voter_button">
+  <br>
+  <div id="div_invite_contents">
+    
+  </div>
+  <input type="button" value="설정하기" id="set_voter_button">
+</div>
+<div id="div_vote_poll">
+
+</div>
+<div id="div_poll_result">
+
+</div>
+</body>
+</html>
